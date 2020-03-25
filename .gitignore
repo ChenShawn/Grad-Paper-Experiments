@@ -1,7 +1,8 @@
 nohup.out
+events.*
+*.pth
 *.pdf
-*.png
-*.jpg
 *.svg
 *.tgz
 *.pyc
+*.log

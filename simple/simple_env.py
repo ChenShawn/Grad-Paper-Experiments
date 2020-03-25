@@ -2,6 +2,7 @@ import numpy as np
 import math
 import random
 from mpl_toolkits.mplot3d import axes3d
+from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 
@@ -9,17 +10,18 @@ plt.style.use('ggplot')
 class SimpleEnv(object):
     """SimpleEnv
     An agent moves on a surface of a 2-dimensional Gaussian with isotropic noise
+    Updated: try using 2D orthogonal sine function as noise
     """
     state_dim = 2
     action_dim = 2
-    action_range = [-0.66, 0.66]
-    state_range = [0.0, 50.0]
+    action_range = [-1.0, 1.0]
+    state_range = [0.0, 40.0]
     epsilon = 0.25
     _max_episode_steps = 200
 
-    def __init__(self, gmean=[20.0, 20.0], gstd=[8.0, 8.0], use_noise=True,
+    def __init__(self, gmean=[20.0, 20.0], gstd=[8.0, 8.0], use_noise=False,
                  noise_ratio=0.1, nmean=[8.0, 8.0], nstd=[1.0, 1.0], 
-                 reward_ratio=1e+6, finite_horizon=True):
+                 reward_ratio=1e+3, finite_horizon=True):
         self._use_noise = use_noise
         # major Gaussian
         self.gauss_mean = np.array(gmean, dtype=np.float32).reshape((-1, 1))
@@ -37,24 +39,29 @@ class SimpleEnv(object):
 
 
     def _compute_reward(self):
-        gauss_ratio = 1.0 / (math.sqrt(2 * math.pi) * math.sqrt(np.linalg.det(self.gauss_var)))
-        dist = self.pos - self.gauss_mean
-        distnum = np.matmul(np.matmul(dist.T, np.linalg.inv(self.gauss_var)), dist)[0, 0]
-        gauss_val = gauss_ratio * math.exp(-0.5 * distnum)
+        pos = self.pos.flatten().tolist()
+        gauss = self._compute_gaussian(pos)
         if self._use_noise:
-            noise_det = math.sqrt(np.linalg.det(self.noise_var))
-            noise_ratio = 1.0 / (math.sqrt(2.0 * math.pi) * noise_det)
-            dist = self.pos - self.noise_mean
-            distnum = np.matmul(np.matmul(dist.T, np.linalg.inv(self.noise_var)), dist)[0, 0]
-            noise_val = noise_ratio * math.exp(-0.5 * distnum)
+            noise = self._compute_noise(pos)
         else:
-            noise_val = 0.0
-        dist = math.sqrt(np.square(self.pos - self.gauss_mean).sum())
-        if dist < self.epsilon:
-            rend = 20.0
-        else:
-            rend = 0.0
-        return self.rratio * (gauss_val - self.nratio * noise_val) + rend
+            noise = 0.0
+        return self.rratio * (gauss - self.nratio * noise)
+
+
+    def _compute_gaussian(self, pos):
+        dist = (pos[0] - self.gauss_mean[0, 0]) ** 2 + (pos[1] - self.gauss_mean[1, 0]) ** 2
+        dist = dist / (2.0 * math.sqrt(self.gauss_var[0, 0] * self.gauss_var[1, 1]))
+        #scale = math.sqrt(2.0 * math.pi * self.gauss_var[0, 0] * self.gauss_var[1, 1])
+        scale = 1.0
+        return math.exp(-dist) / scale
+
+
+    def _compute_noise(self, pos):
+        """_compute_noise
+        Generate 2D sine noise with period equal to 2.0
+        TODO: support more types of noise later
+        """
+        return math.sin(math.pi * pos[0]) + math.sin(math.pi * pos[1])
 
 
     def _is_finished(self):
@@ -102,14 +109,24 @@ class SimpleEnv(object):
         plt.close()
         # regarding height value as z axis
         data = np.array(self.trajectory, dtype=np.float32)
-        # draw figures
         fig = plt.figure()
+        # draw surface
+        xs = np.arange(self.state_range[0], self.state_range[1], 0.2)
+        ys = np.arange(self.state_range[0], self.state_range[1], 0.2)
+        xs, ys = np.meshgrid(xs, ys)
+        zs = np.exp(-((xs - self.gauss_mean[0, 0]) ** 2 + (ys - self.gauss_mean[1, 0]) ** 2) / (2.0 * self.gauss_var[0, 0]))
+        if self._use_noise:
+            zs = zs - self.nratio * (np.sin(math.pi * xs) + np.sin(math.pi * ys))
+        zs *= self.rratio
+        ax = Axes3D(fig)
+        ax.plot_surface(xs, ys, zs, cmap='viridis')
+        # plot line on surface
         ax = fig.gca(projection='3d')
         ax.set_title("Trajectory")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")
-        figure = ax.plot(data[:, 0], data[:, 1], data[:, 2], marker='x')
+        figure = ax.plot(data[:, 0], data[:, 1], data[:, 2], linewidth=1.5, color='red')
         plt.show()
         
 

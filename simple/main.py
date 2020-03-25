@@ -18,8 +18,8 @@ def parse_arguments():
 	parser.add_argument("--policy", default="td3")                  # td3/ddpg/adv
 	parser.add_argument("--env", default="simple")          # OpenAI gym environment name
 	parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
-	parser.add_argument("--start-timesteps", default=1e4, type=int) # Time steps initial random policy is used
-	parser.add_argument("--max-timesteps", default=10000, type=int)   # Max time steps to run environment
+	parser.add_argument("--start-timesteps", default=1e+4, type=int) # Time steps initial random policy is used
+	parser.add_argument("--max-timesteps", default=20000, type=int)   # Max time steps to run environment
 	# Hyperparameters
 	parser.add_argument("--expl-noise", default=0.1)                # Std of Gaussian exploration noise
 	parser.add_argument("--batch-size", default=256, type=int)      # Batch size for both actor and critic
@@ -32,6 +32,7 @@ def parse_arguments():
 	parser.add_argument('--alpha', type=float, default=0.05, help='ONLY USED FOR ADV MODELS')
 	# boolean control variables
 	parser.add_argument("--save-model", type=int, default=20)		# Save model every xxx episodes
+	parser.add_argument('--use-noise', action="store_true", default=False)
 	return parser.parse_args()
 
 
@@ -47,7 +48,7 @@ def get_policy(arglist, kwargs, max_action):
 		kwargs['alpha'] = arglist.alpha
 		kwargs['adv_epsilon'] = arglist.adv_epsilon
 		kwargs['logdir'] = f'./tensorboard/{arglist.policy}_{arglist.env}_{arglist.seed}/'
-		policy = TD3_adv2.TD3(**kwargs)
+		policy = sirtd3.TD3(**kwargs)
 	else:
 		raise NotImplementedError
 	return policy
@@ -69,7 +70,7 @@ def main():
 	if not os.path.exists(f'./train/{args.env}'):
 		os.makedirs(f'./train/{args.env}')
 
-	env = SimpleEnv()
+	env = SimpleEnv(use_noise=args.use_noise)
 	logfile = open(log_filename, 'w+')
 
 	# Set seeds
@@ -93,7 +94,7 @@ def main():
 	# Initialize policy
 	policy = get_policy(args, kwargs, max_action)
 
-	replay_buffer = utils.ReplayBuffer(state_dim, action_dim, max_size=int(1e+5))
+	replay_buffer = utils.ReplayBuffer(state_dim, action_dim, max_size=int(1e+6))
 	state, done = env.reset(), False
 	episode_reward = 0.0
 	episode_timesteps = 0

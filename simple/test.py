@@ -8,21 +8,22 @@ import copy
 import os
 from sklearn.preprocessing import normalize as Normalize
 
-from models import TD3, TD3_adv2
-
+from models import td3, sirtd3, sac, sirsac
+from simple_env import SimpleEnv
 
 def parse_arguments():
     parser = argparse.ArgumentParser("TESTING")
     parser.add_argument('-p', "--policy", type=str, default='td3', help="td3/adv")
-    parser.add_argument('-e', "--env", type=str, default="LunarLanderContinuous-v2", help="env name")
+    parser.add_argument('-e', "--env", type=str, default="simple", help="env name")
     parser.add_argument('-n', "--n-episodes", type=int, default=10, help="number of episodes")
     parser.add_argument('-m', "--relative-mass", type=float, default=1.0, help="relative-mass")
     parser.add_argument("--noise-scale", type=float, default=0.0, help="relative-mass")
-    parser.add_argument("--train-seed", type=int, default=1, help="random seed for training")
-    parser.add_argument("--test-seed", type=int, default=1, help="random seed for testing")
+    parser.add_argument("--train-seed", type=int, default=0, help="random seed for training")
+    parser.add_argument("--test-seed", type=int, default=654321, help="random seed for testing")
     parser.add_argument("--render", action="store_true", default=False)
     parser.add_argument("--ensemble", action="store_true", default=False)
     parser.add_argument("--multiple", type=str, default='', help='mass/noise')
+    parser.add_argument('--use-noise', action="store_true", default=False)
     return parser.parse_args()
 
 
@@ -33,12 +34,12 @@ def get_policy(arglist, kwargs, max_action):
 		kwargs["policy_noise"] = 0.0
 		kwargs["noise_clip"] = 0.0
 		kwargs["policy_freq"] = 2
-		policy = TD3.TD3(**kwargs)
-	elif arglist.policy == 'adv':
+		policy = td3.TD3(**kwargs)
+	elif arglist.policy == 'sirtd3':
 		kwargs['alpha'] = 0.01
 		kwargs['adv_epsilon'] = 0.01
 		kwargs['logdir'] = f'./tensorboard/{arglist.policy}_{arglist.env}_{arglist.train_seed}/'
-		policy = TD3_adv2.TD3(**kwargs)
+		policy = sirtd3.TD3(**kwargs)
 	else:
 		raise NotImplementedError
 	return policy
@@ -59,11 +60,10 @@ def test(arglist):
         filename = "{}_{}_{}_ensemble".format(arglist.policy, env_name, arglist.train_seed)
         directory = "./train/{}".format(env_name)
     
-    #env = gym.make(env_name)
-    env = gen_envs(arglist)
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-    max_action = float(env.action_space.high[0])
+    env = SimpleEnv(use_noise=args.use_noise)
+    state_dim = env.state_dim
+    action_dim = env.action_dim
+    max_action = float(env.action_range[-1])
 
     # Set random seed
     env.seed(random_seed)
@@ -94,15 +94,14 @@ def test(arglist):
             action = policy.select_action(adv_state)
             state, reward, done, _ = env.step(action)
             ep_reward += reward
-            if render:
-                env.render()
             if done:
                 break
             
         #print('Episode: {}\tReward: {}'.format(ep, int(ep_reward)))
         total_reward_list.append(ep_reward)
         ep_reward = 0.0
-    env.close()
+    if render:
+        env.render()
     return total_reward_list
 
 
